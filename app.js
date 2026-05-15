@@ -18,10 +18,10 @@ const loader = document.getElementById("loader");
 const statusText = document.getElementById("status");
 
 const fitAdjustments = {
-  scale: 0.82,
+  scale: 1,
   offsetX: 0,
-  offsetY: -18,
-  tilt: 0,
+  offsetY: 0,
+  tilt: 180,
 };
 
 const ENABLE_FACE_OCCLUDER = false;
@@ -128,7 +128,7 @@ function applyFit() {
   const visibleWidth = clamp(lastFit.width * scale, stageWidth * 0.16, stageWidth * 0.92);
   const modelScale = visibleWidth / modelBaseWidth;
   const fittedX = clamp(lastFit.x + offsetX, stageWidth * 0.08, stageWidth * 0.92);
-  const fittedY = clamp(lastFit.y + offsetY, stageHeight * 0.08, stageHeight * 0.58);
+  const fittedY = clamp(lastFit.y + offsetY, stageHeight * 0.08, stageHeight * 0.74);
 
   glassesModel.visible = true;
   glassesModel.position.set(fittedX, fittedY, 0);
@@ -180,11 +180,11 @@ function getVideoCoverRect() {
 }
 
 function mapLandmark(point) {
-  const cover = getVideoCoverRect();
+  const stage = video.getBoundingClientRect();
 
   return {
-    x: cover.x + cover.width - point.x * cover.width,
-    y: cover.y + point.y * cover.height,
+    x: (1 - point.x) * stage.width,
+    y: point.y * stage.height,
   };
 }
 
@@ -241,14 +241,10 @@ function smoothFit(nextFit) {
 }
 
 function updateFromLandmarks(landmarks) {
-  const eyeA = mapLandmark(landmarks[33]);
-  const eyeB = mapLandmark(landmarks[263]);
-  const faceA = mapLandmark(landmarks[234]);
-  const faceB = mapLandmark(landmarks[454]);
-  const leftOuterEye = eyeA.x <= eyeB.x ? eyeA : eyeB;
-  const rightOuterEye = eyeA.x <= eyeB.x ? eyeB : eyeA;
-  const leftFace = faceA.x <= faceB.x ? faceA : faceB;
-  const rightFace = faceA.x <= faceB.x ? faceB : faceA;
+  const leftOuterEye = mapLandmark(landmarks[263]);
+  const rightOuterEye = mapLandmark(landmarks[33]);
+  const leftFace = mapLandmark(landmarks[454]);
+  const rightFace = mapLandmark(landmarks[234]);
   const noseBridge = mapLandmark(landmarks[168]);
   const noseTip = mapLandmark(landmarks[1]);
   const eyeDistance = distance(leftOuterEye, rightOuterEye);
@@ -263,19 +259,19 @@ function updateFromLandmarks(landmarks) {
     y: (leftOuterEye.y + rightOuterEye.y) / 2,
   };
   const angle = (Math.atan2(rightOuterEye.y - leftOuterEye.y, rightOuterEye.x - leftOuterEye.x) * 180) / Math.PI;
-  const yawFromNose = ((noseTip.x - eyeCenter.x) / eyeDistance) * -68;
-  const pitch = ((noseTip.y - noseBridge.y) / eyeDistance - 0.42) * -40;
-  const widthFromEyes = eyeDistance * 1.86;
-  const widthFromFace = faceWidth * 0.72;
-  const fittedWidth = mix(widthFromEyes, widthFromFace, faceWidth > eyeDistance ? 0.12 : 0);
+  const yawFromNose = ((noseTip.x - eyeCenter.x) / eyeDistance) * -45;
+  const pitch = ((noseTip.y - noseBridge.y) / eyeDistance - 0.42) * -28;
+  const widthFromEyes = eyeDistance * 2.12;
+  const widthFromFace = faceWidth * 0.68;
+  const fittedWidth = mix(widthFromEyes, widthFromFace, faceWidth > eyeDistance ? 0.18 : 0);
   const fittedCenter = {
-    x: eyeCenter.x,
-    y: eyeCenter.y,
+    x: mix(eyeCenter.x, noseBridge.x, 0.16),
+    y: eyeCenter.y + eyeDistance * 0.08,
   };
 
   smoothFit({
     x: clamp(fittedCenter.x, stage.width * 0.06, stage.width * 0.94),
-    y: clamp(fittedCenter.y, stage.height * 0.06, stage.height * 0.58),
+    y: clamp(fittedCenter.y, stage.height * 0.06, stage.height * 0.74),
     width: clamp(fittedWidth, stage.width * 0.16, stage.width * 0.92),
     faceWidth,
     angle,

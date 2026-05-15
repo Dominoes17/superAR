@@ -443,9 +443,9 @@ function updateFromLandmarks(landmarks) {
   };
   const stableNoseBridge = noseBridge || eyeCenter;
   const stableNoseTip = noseTip || stableNoseBridge;
-  const angle = (Math.atan2(rightEye.y - leftEye.y, rightEye.x - leftEye.x) * 180) / Math.PI;
-  const yawFromNose = ((stableNoseTip.x - eyeCenter.x) / eyeDistance) * -36;
-  const pitch = ((stableNoseTip.y - stableNoseBridge.y) / eyeDistance - 0.42) * -20;
+  const angle = (-Math.atan2(rightEye.y - leftEye.y, rightEye.x - leftEye.x) * 180) / Math.PI;
+  const yawFromNose = ((stableNoseTip.x - eyeCenter.x) / eyeDistance) * 36;
+  const pitch = ((stableNoseTip.y - stableNoseBridge.y) / eyeDistance - 0.42) * 20;
   const widthFromEyes = eyeDistance * 3.05;
   const widthFromFace = faceWidth * 0.68;
   const fittedWidth = mix(widthFromEyes, widthFromFace, faceWidth > eyeDistance ? 0.18 : 0);
@@ -527,7 +527,7 @@ function updateFromDetection(detection) {
         x: (leftEye.x + rightEye.x) / 2,
         y: (leftEye.y + rightEye.y) / 2,
       };
-      const angle = (Math.atan2(rightEye.y - leftEye.y, rightEye.x - leftEye.x) * 180) / Math.PI;
+      const angle = (-Math.atan2(rightEye.y - leftEye.y, rightEye.x - leftEye.x) * 180) / Math.PI;
 
       fit = {
         x: clamp(eyeCenter.x, stage.width * 0.06, stage.width * 0.94),

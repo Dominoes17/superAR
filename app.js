@@ -24,6 +24,8 @@ const fitAdjustments = {
   tilt: 0,
 };
 
+const ENABLE_FACE_OCCLUDER = false;
+
 let faceMesh = null;
 let trackingFrame = null;
 let renderFrame = null;
@@ -116,14 +118,20 @@ function applyFit() {
     return;
   }
 
+  const stage = video.getBoundingClientRect();
+  const stageWidth = Math.max(1, stage.width);
+  const stageHeight = Math.max(1, stage.height);
   const scale = controlValue("scale");
   const offsetX = controlValue("offsetX");
   const offsetY = controlValue("offsetY");
   const tilt = controlValue("tilt");
-  const modelScale = (lastFit.width * scale) / modelBaseWidth;
+  const visibleWidth = clamp(lastFit.width * scale, stageWidth * 0.16, stageWidth * 0.92);
+  const modelScale = visibleWidth / modelBaseWidth;
+  const fittedX = clamp(lastFit.x + offsetX, stageWidth * 0.08, stageWidth * 0.92);
+  const fittedY = clamp(lastFit.y + offsetY, stageHeight * 0.08, stageHeight * 0.82);
 
   glassesModel.visible = true;
-  glassesModel.position.set(lastFit.x + offsetX, lastFit.y + offsetY, 0);
+  glassesModel.position.set(fittedX, fittedY, 0);
   glassesModel.rotation.set(
     THREE.MathUtils.degToRad(lastFit.pitch),
     THREE.MathUtils.degToRad(lastFit.yaw),
@@ -135,11 +143,11 @@ function applyFit() {
   const turnAmount = Math.abs(lastFit.yaw);
   const turnDirection = Math.sign(lastFit.yaw || 1);
 
-  faceOccluder.visible = hasTrackedFace && turnAmount > 14;
+  faceOccluder.visible = ENABLE_FACE_OCCLUDER && hasTrackedFace && turnAmount > 14;
   faceOccluder.position.set(
-    lastFit.x + offsetX - turnDirection * lastFit.faceWidth * 0.34,
-    lastFit.y + offsetY + lastFit.faceWidth * 0.1,
-    lastFit.width * 0.3,
+    fittedX - turnDirection * lastFit.faceWidth * 0.34,
+    fittedY + lastFit.faceWidth * 0.1,
+    visibleWidth * 0.3,
   );
   faceOccluder.rotation.set(
     THREE.MathUtils.degToRad(lastFit.pitch * 0.65),
@@ -152,7 +160,7 @@ function applyFit() {
 
 function getVideoCoverRect() {
   const stage = video.getBoundingClientRect();
-  const videoRatio = video.videoWidth / video.videoHeight;
+  const videoRatio = video.videoWidth && video.videoHeight ? video.videoWidth / video.videoHeight : stage.width / stage.height;
   const stageRatio = stage.width / stage.height;
 
   let width = stage.width;
@@ -241,6 +249,11 @@ function updateFromLandmarks(landmarks) {
   const noseTip = mapLandmark(landmarks[1]);
   const eyeDistance = distance(leftOuterEye, rightOuterEye);
   const faceWidth = distance(leftFace, rightFace);
+  const stage = video.getBoundingClientRect();
+
+  if (!Number.isFinite(eyeDistance) || eyeDistance < 8 || !Number.isFinite(faceWidth) || faceWidth < 16) {
+    return;
+  }
   const eyeCenter = {
     x: (leftOuterEye.x + rightOuterEye.x) / 2,
     y: (leftOuterEye.y + rightOuterEye.y) / 2,
@@ -258,9 +271,9 @@ function updateFromLandmarks(landmarks) {
   };
 
   smoothFit({
-    x: fittedCenter.x,
-    y: fittedCenter.y,
-    width: Math.max(80, Math.min(1100, fittedWidth)),
+    x: clamp(fittedCenter.x, stage.width * 0.06, stage.width * 0.94),
+    y: clamp(fittedCenter.y, stage.height * 0.06, stage.height * 0.82),
+    width: clamp(fittedWidth, stage.width * 0.16, stage.width * 0.92),
     faceWidth,
     angle,
     yaw: clamp(yawFromNose + yawFromDepth, -42, 42),

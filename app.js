@@ -20,9 +20,9 @@ const debugEnabled = new URLSearchParams(window.location.search).has("debug");
 const debugText = document.createElement("pre");
 
 const fitAdjustments = {
-  scale: 0.58,
+  scale: 0.68,
   offsetX: 0,
-  offsetY: -26,
+  offsetY: 0,
   tilt: 180,
 };
 
@@ -225,6 +225,32 @@ function mappedLandmark(landmarks, index) {
   return isUsableLandmark(landmarks[index]) ? mapLandmark(landmarks[index]) : null;
 }
 
+function validMappedLandmarks(landmarks) {
+  return landmarks.filter(isUsableLandmark).map(mapLandmark);
+}
+
+function boundingBox(points) {
+  if (!points.length) {
+    return null;
+  }
+
+  const xs = points.map((point) => point.x);
+  const ys = points.map((point) => point.y);
+  const minX = Math.min(...xs);
+  const maxX = Math.max(...xs);
+  const minY = Math.min(...ys);
+  const maxY = Math.max(...ys);
+
+  return {
+    minX,
+    maxX,
+    minY,
+    maxY,
+    width: maxX - minX,
+    height: maxY - minY,
+  };
+}
+
 function distance(a, b) {
   return Math.hypot(a.x - b.x, a.y - b.y);
 }
@@ -279,6 +305,7 @@ function smoothFit(nextFit) {
 
 function updateFromLandmarks(landmarks) {
   const stage = video.getBoundingClientRect();
+  const faceBox = boundingBox(validMappedLandmarks(landmarks));
   const eyeOne = averageMappedLandmarks(landmarks, [33, 133, 159, 145, 160, 144, 468, 469, 470, 471, 472]);
   const eyeTwo = averageMappedLandmarks(landmarks, [263, 362, 386, 374, 385, 380, 473, 474, 475, 476, 477]);
   const faceOne = mappedLandmark(landmarks, 234);
@@ -287,8 +314,32 @@ function updateFromLandmarks(landmarks) {
   const noseTip = mappedLandmark(landmarks, 1);
 
   if (!eyeOne || !eyeTwo) {
+    if (faceBox && faceBox.width > stage.width * 0.16 && faceBox.height > stage.height * 0.18) {
+      const fallbackFit = {
+        x: clamp((faceBox.minX + faceBox.maxX) / 2, stage.width * 0.06, stage.width * 0.94),
+        y: clamp(faceBox.minY + faceBox.height * 0.36, stage.height * 0.04, stage.height * 0.72),
+        width: clamp(faceBox.width * 0.62, stage.width * 0.16, stage.width * 0.72),
+        faceWidth: faceBox.width,
+        angle: 0,
+        yaw: 0,
+        pitch: 0,
+      };
+
+      if (debugEnabled) {
+        debugText.textContent = [
+          `stage ${Math.round(stage.width)}x${Math.round(stage.height)}`,
+          `fallback face ${Math.round(faceBox.width)}x${Math.round(faceBox.height)}`,
+          `fit ${Math.round(fallbackFit.x)},${Math.round(fallbackFit.y)} w=${Math.round(fallbackFit.width)}`,
+        ].join("\n");
+      }
+
+      smoothFit(fallbackFit);
+      applyFit();
+      return;
+    }
+
     if (debugEnabled) {
-      debugText.textContent = `stage ${Math.round(stage.width)}x${Math.round(stage.height)}\nwaiting for valid eye landmarks`;
+      debugText.textContent = `stage ${Math.round(stage.width)}x${Math.round(stage.height)}\nwaiting for valid face landmarks`;
     }
     return;
   }
@@ -315,7 +366,7 @@ function updateFromLandmarks(landmarks) {
   const fittedWidth = mix(widthFromEyes, widthFromFace, faceWidth > eyeDistance ? 0.18 : 0);
   const fittedCenter = {
     x: mix(eyeCenter.x, stableNoseBridge.x, 0.12),
-    y: eyeCenter.y + eyeDistance * 0.06,
+    y: eyeCenter.y + eyeDistance * 0.34,
   };
   const nextFit = {
     x: clamp(fittedCenter.x, stage.width * 0.06, stage.width * 0.94),

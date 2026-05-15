@@ -1,0 +1,12 @@
+{
+  "name": "superar",
+  "version": "1.0.0",
+  "description": "Simple browser-based sunglasses try-on without an AR SDK.",
+  "private": true,
+  "scripts": {
+    "dev": "node server.js",
+    "build": "echo Static app - no build step required",
+    "start": "node server.js"
+  },
+  "license": "MIT"
+}

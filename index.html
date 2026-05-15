@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>SuperAR Sunglasses Try-On</title>
+    <link rel="stylesheet" href="style.css" />
+    <script type="importmap">
+      {
+        "imports": {
+          "three": "https://cdn.jsdelivr.net/npm/three@0.164.1/build/three.module.js"
+        }
+      }
+    </script>
+  </head>
+  <body>
+    <main class="app-shell">
+      <section class="try-on" aria-label="Sunglasses try-on">
+        <video id="camera" autoplay muted playsinline></video>
+        <canvas id="ar-canvas" aria-hidden="true"></canvas>
+        <div class="loader" id="loader">
+          <div class="loader-ring"></div>
+          <p id="loader-text">Loading AR</p>
+        </div>
+        <p class="status" id="status">Starting camera</p>
+        <div class="style-picker" aria-label="Sunglasses style">
+          <button class="style-option active" type="button" data-glasses="black" aria-pressed="true">
+            <span class="swatch swatch-black" aria-hidden="true"></span>
+            Black
+          </button>
+          <button class="style-option" type="button" data-glasses="gold" aria-pressed="false">
+            <span class="swatch swatch-gold" aria-hidden="true"></span>
+            Gold
+          </button>
+        </div>
+      </section>
+    </main>
+
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/face_mesh.js"></script>
+    <script type="module" src="app.js?v=bottom-selector-20260515"></script>
+  </body>
+</html>

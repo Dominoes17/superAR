@@ -196,6 +196,35 @@ function mapLandmark(point) {
   };
 }
 
+function isUsableLandmark(point) {
+  return (
+    point &&
+    Number.isFinite(point.x) &&
+    Number.isFinite(point.y) &&
+    point.x > -0.35 &&
+    point.x < 1.35 &&
+    point.y > -0.35 &&
+    point.y < 1.35
+  );
+}
+
+function averageMappedLandmarks(landmarks, indexes) {
+  const points = indexes.filter((index) => isUsableLandmark(landmarks[index])).map((index) => mapLandmark(landmarks[index]));
+
+  if (!points.length) {
+    return null;
+  }
+
+  return {
+    x: points.reduce((sum, point) => sum + point.x, 0) / points.length,
+    y: points.reduce((sum, point) => sum + point.y, 0) / points.length,
+  };
+}
+
+function mappedLandmark(landmarks, index) {
+  return isUsableLandmark(landmarks[index]) ? mapLandmark(landmarks[index]) : null;
+}
+
 function distance(a, b) {
   return Math.hypot(a.x - b.x, a.y - b.y);
 }
@@ -249,32 +278,44 @@ function smoothFit(nextFit) {
 }
 
 function updateFromLandmarks(landmarks) {
-  const leftOuterEye = mapLandmark(landmarks[263]);
-  const rightOuterEye = mapLandmark(landmarks[33]);
-  const leftFace = mapLandmark(landmarks[454]);
-  const rightFace = mapLandmark(landmarks[234]);
-  const noseBridge = mapLandmark(landmarks[168]);
-  const noseTip = mapLandmark(landmarks[1]);
-  const eyeDistance = distance(leftOuterEye, rightOuterEye);
-  const faceWidth = distance(leftFace, rightFace);
   const stage = video.getBoundingClientRect();
+  const eyeOne = averageMappedLandmarks(landmarks, [33, 133, 159, 145, 160, 144, 468, 469, 470, 471, 472]);
+  const eyeTwo = averageMappedLandmarks(landmarks, [263, 362, 386, 374, 385, 380, 473, 474, 475, 476, 477]);
+  const faceOne = mappedLandmark(landmarks, 234);
+  const faceTwo = mappedLandmark(landmarks, 454);
+  const noseBridge = mappedLandmark(landmarks, 168);
+  const noseTip = mappedLandmark(landmarks, 1);
+
+  if (!eyeOne || !eyeTwo) {
+    if (debugEnabled) {
+      debugText.textContent = `stage ${Math.round(stage.width)}x${Math.round(stage.height)}\nwaiting for valid eye landmarks`;
+    }
+    return;
+  }
+
+  const leftEye = eyeOne.x <= eyeTwo.x ? eyeOne : eyeTwo;
+  const rightEye = eyeOne.x <= eyeTwo.x ? eyeTwo : eyeOne;
+  const eyeDistance = distance(leftEye, rightEye);
+  const faceWidth = faceOne && faceTwo ? distance(faceOne, faceTwo) : eyeDistance * 2.85;
 
   if (!Number.isFinite(eyeDistance) || eyeDistance < 8 || !Number.isFinite(faceWidth) || faceWidth < 16) {
     return;
   }
   const eyeCenter = {
-    x: (leftOuterEye.x + rightOuterEye.x) / 2,
-    y: (leftOuterEye.y + rightOuterEye.y) / 2,
+    x: (leftEye.x + rightEye.x) / 2,
+    y: (leftEye.y + rightEye.y) / 2,
   };
-  const angle = (Math.atan2(rightOuterEye.y - leftOuterEye.y, rightOuterEye.x - leftOuterEye.x) * 180) / Math.PI;
-  const yawFromNose = ((noseTip.x - eyeCenter.x) / eyeDistance) * -45;
-  const pitch = ((noseTip.y - noseBridge.y) / eyeDistance - 0.42) * -28;
-  const widthFromEyes = eyeDistance * 2.12;
+  const stableNoseBridge = noseBridge || eyeCenter;
+  const stableNoseTip = noseTip || stableNoseBridge;
+  const angle = (Math.atan2(rightEye.y - leftEye.y, rightEye.x - leftEye.x) * 180) / Math.PI;
+  const yawFromNose = ((stableNoseTip.x - eyeCenter.x) / eyeDistance) * -36;
+  const pitch = ((stableNoseTip.y - stableNoseBridge.y) / eyeDistance - 0.42) * -20;
+  const widthFromEyes = eyeDistance * 3.05;
   const widthFromFace = faceWidth * 0.68;
   const fittedWidth = mix(widthFromEyes, widthFromFace, faceWidth > eyeDistance ? 0.18 : 0);
   const fittedCenter = {
-    x: mix(eyeCenter.x, noseBridge.x, 0.16),
-    y: eyeCenter.y - eyeDistance * 0.36,
+    x: mix(eyeCenter.x, stableNoseBridge.x, 0.12),
+    y: eyeCenter.y + eyeDistance * 0.06,
   };
   const nextFit = {
     x: clamp(fittedCenter.x, stage.width * 0.06, stage.width * 0.94),

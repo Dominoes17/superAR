@@ -27,6 +27,7 @@ const fitAdjustments = {
   tilt: 180,
 };
 
+const ROLL_GAIN = 0.82;
 const ENABLE_FACE_OCCLUDER = false;
 
 let faceLandmarker = null;
@@ -443,7 +444,7 @@ function updateFromLandmarks(landmarks) {
   };
   const stableNoseBridge = noseBridge || eyeCenter;
   const stableNoseTip = noseTip || stableNoseBridge;
-  const angle = (-Math.atan2(rightEye.y - leftEye.y, rightEye.x - leftEye.x) * 180) / Math.PI;
+  const angle = ((Math.atan2(rightEye.y - leftEye.y, rightEye.x - leftEye.x) * 180) / Math.PI) * ROLL_GAIN;
   const yawFromNose = ((stableNoseTip.x - eyeCenter.x) / eyeDistance) * 36;
   const pitch = ((stableNoseTip.y - stableNoseBridge.y) / eyeDistance - 0.42) * 20;
   const widthFromEyes = eyeDistance * 3.05;
@@ -527,7 +528,7 @@ function updateFromDetection(detection) {
         x: (leftEye.x + rightEye.x) / 2,
         y: (leftEye.y + rightEye.y) / 2,
       };
-      const angle = (-Math.atan2(rightEye.y - leftEye.y, rightEye.x - leftEye.x) * 180) / Math.PI;
+      const angle = ((Math.atan2(rightEye.y - leftEye.y, rightEye.x - leftEye.x) * 180) / Math.PI) * ROLL_GAIN;
 
       fit = {
         x: clamp(eyeCenter.x, stage.width * 0.06, stage.width * 0.94),

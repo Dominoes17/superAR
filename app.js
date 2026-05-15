@@ -309,12 +309,12 @@ function detectionLocation(detection) {
   return detection?.locationData || detection?.location_data || null;
 }
 
-function detectionBox(location) {
-  return location?.relativeBoundingBox || location?.relative_bounding_box || null;
+function detectionBox(detection, location) {
+  return detection?.boundingBox || location?.relativeBoundingBox || location?.relative_bounding_box || null;
 }
 
-function detectionKeypoints(location) {
-  return Array.from(location?.relativeKeypoints || location?.relative_keypoints || []);
+function detectionKeypoints(detection, location) {
+  return Array.from(detection?.landmarks || location?.relativeKeypoints || location?.relative_keypoints || []);
 }
 
 function boxValue(box, ...names) {
@@ -501,13 +501,16 @@ function onFaceMeshResults(results) {
 function updateFromDetection(detection) {
   const stage = video.getBoundingClientRect();
   const location = detectionLocation(detection);
-  const box = detectionBox(location);
+  const box = detectionBox(detection, location);
 
   if (!box) {
+    if (debugEnabled) {
+      debugText.textContent = `stage ${Math.round(stage.width)}x${Math.round(stage.height)}\nsource face-detection\nno readable box`;
+    }
     return false;
   }
 
-  const keypoints = detectionKeypoints(location).map(mapRelativePoint).filter(Boolean);
+  const keypoints = detectionKeypoints(detection, location).map(mapRelativePoint).filter(Boolean);
   const eyeA = keypoints[0];
   const eyeB = keypoints[1];
   let fit = null;
@@ -538,17 +541,22 @@ function updateFromDetection(detection) {
 
   if (!fit) {
     const cover = getVideoCoverRect();
+    const centerNormX = boxValue(box, "xCenter", "xcenter", "centerX");
+    const centerNormY = boxValue(box, "yCenter", "ycenter", "centerY");
     const xmin = boxValue(box, "xmin", "xMin", "x");
     const ymin = boxValue(box, "ymin", "yMin", "y");
     const boxWidth = boxValue(box, "width", "w");
     const boxHeight = boxValue(box, "height", "h");
 
-    if (xmin === null || ymin === null || boxWidth === null || boxHeight === null) {
+    if ((centerNormX === null && xmin === null) || (centerNormY === null && ymin === null) || boxWidth === null || boxHeight === null) {
+      if (debugEnabled) {
+        debugText.textContent = `stage ${Math.round(stage.width)}x${Math.round(stage.height)}\nsource face-detection\nunreadable box fields`;
+      }
       return false;
     }
 
-    const centerX = cover.x + cover.width - (boxValue(box, "xCenter") ?? xmin + boxWidth / 2) * cover.width;
-    const topY = cover.y + ymin * cover.height;
+    const centerX = cover.x + cover.width - (centerNormX ?? xmin + boxWidth / 2) * cover.width;
+    const topY = cover.y + (ymin ?? centerNormY - boxHeight / 2) * cover.height;
     const width = boxWidth * cover.width;
     const height = boxHeight * cover.height;
 
@@ -585,6 +593,12 @@ function onFaceDetectionResults(results) {
 
   if (detection) {
     updateFromDetection(detection);
+    return;
+  }
+
+  if (debugEnabled && performance.now() - lastMeshFitAt > 250) {
+    const stage = video.getBoundingClientRect();
+    debugText.textContent = `stage ${Math.round(stage.width)}x${Math.round(stage.height)}\nsource face-detection\nno detections`;
   }
 }
 

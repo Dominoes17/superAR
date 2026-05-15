@@ -1,5 +1,6 @@
 import * as THREE from "https://esm.sh/three@0.164.1";
 import { GLTFLoader } from "https://esm.sh/three@0.164.1/examples/jsm/loaders/GLTFLoader.js";
+import { FaceLandmarker, FilesetResolver } from "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@latest/vision_bundle.mjs";
 
 const GLASSES_OPTIONS = {
   black: {
@@ -28,6 +29,7 @@ const fitAdjustments = {
 
 const ENABLE_FACE_OCCLUDER = false;
 
+let faceLandmarker = null;
 let faceMesh = null;
 let faceDetection = null;
 let trackingFrame = null;
@@ -603,20 +605,54 @@ function onFaceDetectionResults(results) {
 }
 
 async function detectFrame() {
-  if ((!faceMesh && !faceDetection) || video.readyState < 2 || isDetecting) {
+  if (!faceLandmarker || video.readyState < 2 || isDetecting) {
     trackingFrame = requestAnimationFrame(detectFrame);
     return;
   }
 
   isDetecting = true;
-  if (faceMesh) {
-    await faceMesh.send({ image: video });
+  const now = performance.now();
+  const results = faceLandmarker.detectForVideo(video, now);
+  const landmarks = results.faceLandmarks?.[0];
+
+  if (landmarks) {
+    if (updateFromLandmarks(landmarks)) {
+      lastSeenAt = now;
+      setStatus("MediaPipe Tasks tracking active. Move your head and the model should follow.");
+    }
+  } else if (debugEnabled) {
+    const stage = video.getBoundingClientRect();
+    debugText.textContent = `stage ${Math.round(stage.width)}x${Math.round(stage.height)}\nsource tasks-vision\nno landmarks`;
   }
-  if (faceDetection && performance.now() - lastMeshFitAt > 250) {
-    await faceDetection.send({ image: video });
-  }
+
   isDetecting = false;
   trackingFrame = requestAnimationFrame(detectFrame);
+}
+
+async function createFaceLandmarker() {
+  try {
+    const vision = await FilesetResolver.forVisionTasks("https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@latest/wasm");
+
+    faceLandmarker = await FaceLandmarker.createFromOptions(vision, {
+      baseOptions: {
+        modelAssetPath: "https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/latest/face_landmarker.task",
+      },
+      runningMode: "VIDEO",
+      numFaces: 1,
+      minFaceDetectionConfidence: 0.5,
+      minFacePresenceConfidence: 0.5,
+      minTrackingConfidence: 0.5,
+    });
+  } catch (error) {
+    console.error(error);
+    setStatus("Could not load the new face tracker on this device.");
+    if (debugEnabled) {
+      debugText.textContent = `tasks-vision init failed\n${error.message || error}`;
+    }
+    return false;
+  }
+
+  return true;
 }
 
 function createFaceMesh() {
@@ -845,11 +881,8 @@ async function startCamera() {
     renderLoop();
     loader.classList.add("hidden");
 
-    const hasFaceMesh = createFaceMesh();
-    createFaceDetection();
-
-    if (hasFaceMesh || faceDetection) {
-      setStatus("Camera ready. Loading face tracker.");
+    setStatus("Camera ready. Loading face tracker.");
+    if (await createFaceLandmarker()) {
       detectFrame();
     }
   } catch (error) {

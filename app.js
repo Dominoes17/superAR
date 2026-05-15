@@ -16,11 +16,13 @@ const video = document.getElementById("camera");
 const canvas = document.getElementById("ar-canvas");
 const loader = document.getElementById("loader");
 const statusText = document.getElementById("status");
+const debugEnabled = new URLSearchParams(window.location.search).has("debug");
+const debugText = document.createElement("pre");
 
 const fitAdjustments = {
-  scale: 1,
+  scale: 0.58,
   offsetX: 0,
-  offsetY: 0,
+  offsetY: -26,
   tilt: 180,
 };
 
@@ -47,6 +49,12 @@ let lastFit = {
   yaw: 0,
   pitch: 0,
 };
+
+if (debugEnabled) {
+  debugText.style.cssText =
+    "position:absolute;left:8px;top:8px;z-index:4;margin:0;padding:8px;color:#0f0;background:rgb(0 0 0 / .72);font:11px/1.25 monospace;pointer-events:none";
+  document.querySelector(".try-on").append(debugText);
+}
 
 const renderer = new THREE.WebGLRenderer({
   canvas,
@@ -133,8 +141,8 @@ function applyFit() {
   glassesModel.visible = true;
   glassesModel.position.set(fittedX, fittedY, 0);
   glassesModel.rotation.set(
-    THREE.MathUtils.degToRad(lastFit.pitch),
-    THREE.MathUtils.degToRad(lastFit.yaw),
+    0,
+    0,
     THREE.MathUtils.degToRad(lastFit.angle + tilt),
     "YXZ",
   );
@@ -266,18 +274,28 @@ function updateFromLandmarks(landmarks) {
   const fittedWidth = mix(widthFromEyes, widthFromFace, faceWidth > eyeDistance ? 0.18 : 0);
   const fittedCenter = {
     x: mix(eyeCenter.x, noseBridge.x, 0.16),
-    y: eyeCenter.y + eyeDistance * 0.08,
+    y: eyeCenter.y - eyeDistance * 0.36,
   };
-
-  smoothFit({
+  const nextFit = {
     x: clamp(fittedCenter.x, stage.width * 0.06, stage.width * 0.94),
-    y: clamp(fittedCenter.y, stage.height * 0.06, stage.height * 0.74),
-    width: clamp(fittedWidth, stage.width * 0.16, stage.width * 0.92),
+    y: clamp(fittedCenter.y, stage.height * 0.04, stage.height * 0.68),
+    width: clamp(fittedWidth, stage.width * 0.12, stage.width * 0.68),
     faceWidth,
     angle,
-    yaw: clamp(yawFromNose, -24, 24),
-    pitch: clamp(pitch, -12, 12),
-  });
+    yaw: clamp(yawFromNose, -16, 16),
+    pitch: clamp(pitch, -8, 8),
+  };
+
+  if (debugEnabled) {
+    debugText.textContent = [
+      `stage ${Math.round(stage.width)}x${Math.round(stage.height)}`,
+      `eye ${Math.round(eyeCenter.x)},${Math.round(eyeCenter.y)} d=${Math.round(eyeDistance)}`,
+      `fit ${Math.round(nextFit.x)},${Math.round(nextFit.y)} w=${Math.round(nextFit.width)}`,
+      `angle ${nextFit.angle.toFixed(1)} yaw ${nextFit.yaw.toFixed(1)} pitch ${nextFit.pitch.toFixed(1)}`,
+    ].join("\n");
+  }
+
+  smoothFit(nextFit);
 
   applyFit();
 }

@@ -20,7 +20,7 @@ const debugEnabled = new URLSearchParams(window.location.search).has("debug");
 const debugText = document.createElement("pre");
 
 const fitAdjustments = {
-  scale: 0.68,
+  scale: 1,
   offsetX: 0,
   offsetY: 0,
   tilt: 180,
@@ -141,8 +141,8 @@ function applyFit() {
   glassesModel.visible = true;
   glassesModel.position.set(fittedX, fittedY, 0);
   glassesModel.rotation.set(
-    0,
-    0,
+    THREE.MathUtils.degToRad(lastFit.pitch),
+    THREE.MathUtils.degToRad(lastFit.yaw),
     THREE.MathUtils.degToRad(lastFit.angle + tilt),
     "YXZ",
   );
@@ -344,9 +344,10 @@ function smoothFit(nextFit) {
 
 function updateFromLandmarks(landmarks) {
   const stage = video.getBoundingClientRect();
-  const faceBox = boundingBox(validMappedLandmarks(landmarks));
-  const eyeOne = averageMappedLandmarks(landmarks, [33, 133, 159, 145, 160, 144, 468, 469, 470, 471, 472]);
-  const eyeTwo = averageMappedLandmarks(landmarks, [263, 362, 386, 374, 385, 380, 473, 474, 475, 476, 477]);
+  const validPoints = validMappedLandmarks(landmarks);
+  const faceBox = boundingBox(validPoints);
+  const eyeOne = averageMappedLandmarks(landmarks, [33, 133, 159, 145, 160, 144]);
+  const eyeTwo = averageMappedLandmarks(landmarks, [263, 362, 386, 374, 385, 380]);
   const faceOne = mappedLandmark(landmarks, 234);
   const faceTwo = mappedLandmark(landmarks, 454);
   const noseBridge = mappedLandmark(landmarks, 168);
@@ -367,6 +368,7 @@ function updateFromLandmarks(landmarks) {
       if (debugEnabled) {
         debugText.textContent = [
           `stage ${Math.round(stage.width)}x${Math.round(stage.height)}`,
+          `valid ${validPoints.length}/${landmarks.length}`,
           `fallback face ${Math.round(faceBox.width)}x${Math.round(faceBox.height)}`,
           `fit ${Math.round(fallbackFit.x)},${Math.round(fallbackFit.y)} w=${Math.round(fallbackFit.width)}`,
         ].join("\n");
@@ -382,6 +384,7 @@ function updateFromLandmarks(landmarks) {
     if (debugEnabled) {
       debugText.textContent = [
         `stage ${Math.round(stage.width)}x${Math.round(stage.height)}`,
+        `valid ${validPoints.length}/${landmarks.length}`,
         "fallback centered",
         `fit ${Math.round(fallbackFit.x)},${Math.round(fallbackFit.y)} w=${Math.round(fallbackFit.width)}`,
       ].join("\n");
@@ -414,7 +417,7 @@ function updateFromLandmarks(landmarks) {
   const fittedWidth = mix(widthFromEyes, widthFromFace, faceWidth > eyeDistance ? 0.18 : 0);
   const fittedCenter = {
     x: mix(eyeCenter.x, stableNoseBridge.x, 0.12),
-    y: eyeCenter.y + eyeDistance * 0.56,
+    y: eyeCenter.y + eyeDistance * 0.38,
   };
   const nextFit = {
     x: clamp(fittedCenter.x, stage.width * 0.06, stage.width * 0.94),
@@ -429,6 +432,7 @@ function updateFromLandmarks(landmarks) {
   if (debugEnabled) {
     debugText.textContent = [
       `stage ${Math.round(stage.width)}x${Math.round(stage.height)}`,
+      `valid ${validPoints.length}/${landmarks.length}`,
       `eye ${Math.round(eyeCenter.x)},${Math.round(eyeCenter.y)} d=${Math.round(eyeDistance)}`,
       `fit ${Math.round(nextFit.x)},${Math.round(nextFit.y)} w=${Math.round(nextFit.width)}`,
       `angle ${nextFit.angle.toFixed(1)} yaw ${nextFit.yaw.toFixed(1)} pitch ${nextFit.pitch.toFixed(1)}`,
@@ -481,7 +485,7 @@ function createFaceMesh() {
 
   faceMesh.setOptions({
     maxNumFaces: 1,
-    refineLandmarks: true,
+    refineLandmarks: false,
     minDetectionConfidence: 0.55,
     minTrackingConfidence: 0.55,
   });

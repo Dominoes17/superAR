@@ -241,10 +241,14 @@ function smoothFit(nextFit) {
 }
 
 function updateFromLandmarks(landmarks) {
-  const leftOuterEye = mapLandmark(landmarks[33]);
-  const rightOuterEye = mapLandmark(landmarks[263]);
-  const leftFace = mapLandmark(landmarks[234]);
-  const rightFace = mapLandmark(landmarks[454]);
+  const eyeA = mapLandmark(landmarks[33]);
+  const eyeB = mapLandmark(landmarks[263]);
+  const faceA = mapLandmark(landmarks[234]);
+  const faceB = mapLandmark(landmarks[454]);
+  const leftOuterEye = eyeA.x <= eyeB.x ? eyeA : eyeB;
+  const rightOuterEye = eyeA.x <= eyeB.x ? eyeB : eyeA;
+  const leftFace = faceA.x <= faceB.x ? faceA : faceB;
+  const rightFace = faceA.x <= faceB.x ? faceB : faceA;
   const noseBridge = mapLandmark(landmarks[168]);
   const noseTip = mapLandmark(landmarks[1]);
   const eyeDistance = distance(leftOuterEye, rightOuterEye);
@@ -259,15 +263,14 @@ function updateFromLandmarks(landmarks) {
     y: (leftOuterEye.y + rightOuterEye.y) / 2,
   };
   const angle = (Math.atan2(rightOuterEye.y - leftOuterEye.y, rightOuterEye.x - leftOuterEye.x) * 180) / Math.PI;
-  const yawFromNose = ((noseTip.x - eyeCenter.x) / eyeDistance) * 95;
-  const yawFromDepth = (landmarks[33].z - landmarks[263].z) * 145;
-  const pitch = ((noseTip.y - noseBridge.y) / eyeDistance - 0.42) * -65;
-  const widthFromEyes = eyeDistance * 2.32;
+  const yawFromNose = ((noseTip.x - eyeCenter.x) / eyeDistance) * -68;
+  const pitch = ((noseTip.y - noseBridge.y) / eyeDistance - 0.42) * -40;
+  const widthFromEyes = eyeDistance * 2.18;
   const widthFromFace = faceWidth * 0.72;
   const fittedWidth = mix(widthFromEyes, widthFromFace, faceWidth > eyeDistance ? 0.28 : 0);
   const fittedCenter = {
-    x: mix(eyeCenter.x, noseBridge.x, 0.58),
-    y: mix(eyeCenter.y, noseBridge.y, 0.42) + eyeDistance * 0.28,
+    x: mix(eyeCenter.x, noseBridge.x, 0.38),
+    y: mix(eyeCenter.y, noseBridge.y, 0.3) + eyeDistance * 0.12,
   };
 
   smoothFit({
@@ -276,8 +279,8 @@ function updateFromLandmarks(landmarks) {
     width: clamp(fittedWidth, stage.width * 0.16, stage.width * 0.92),
     faceWidth,
     angle,
-    yaw: clamp(yawFromNose + yawFromDepth, -42, 42),
-    pitch: clamp(pitch, -22, 22),
+    yaw: clamp(yawFromNose, -24, 24),
+    pitch: clamp(pitch, -12, 12),
   });
 
   applyFit();

@@ -18,9 +18,9 @@ const loader = document.getElementById("loader");
 const statusText = document.getElementById("status");
 
 const fitAdjustments = {
-  scale: 1,
+  scale: 0.82,
   offsetX: 0,
-  offsetY: 0,
+  offsetY: -18,
   tilt: 0,
 };
 
@@ -128,7 +128,7 @@ function applyFit() {
   const visibleWidth = clamp(lastFit.width * scale, stageWidth * 0.16, stageWidth * 0.92);
   const modelScale = visibleWidth / modelBaseWidth;
   const fittedX = clamp(lastFit.x + offsetX, stageWidth * 0.08, stageWidth * 0.92);
-  const fittedY = clamp(lastFit.y + offsetY, stageHeight * 0.08, stageHeight * 0.82);
+  const fittedY = clamp(lastFit.y + offsetY, stageHeight * 0.08, stageHeight * 0.58);
 
   glassesModel.visible = true;
   glassesModel.position.set(fittedX, fittedY, 0);
@@ -265,17 +265,17 @@ function updateFromLandmarks(landmarks) {
   const angle = (Math.atan2(rightOuterEye.y - leftOuterEye.y, rightOuterEye.x - leftOuterEye.x) * 180) / Math.PI;
   const yawFromNose = ((noseTip.x - eyeCenter.x) / eyeDistance) * -68;
   const pitch = ((noseTip.y - noseBridge.y) / eyeDistance - 0.42) * -40;
-  const widthFromEyes = eyeDistance * 2.18;
+  const widthFromEyes = eyeDistance * 1.86;
   const widthFromFace = faceWidth * 0.72;
-  const fittedWidth = mix(widthFromEyes, widthFromFace, faceWidth > eyeDistance ? 0.28 : 0);
+  const fittedWidth = mix(widthFromEyes, widthFromFace, faceWidth > eyeDistance ? 0.12 : 0);
   const fittedCenter = {
-    x: mix(eyeCenter.x, noseBridge.x, 0.38),
-    y: mix(eyeCenter.y, noseBridge.y, 0.3) + eyeDistance * 0.12,
+    x: eyeCenter.x,
+    y: eyeCenter.y,
   };
 
   smoothFit({
     x: clamp(fittedCenter.x, stage.width * 0.06, stage.width * 0.94),
-    y: clamp(fittedCenter.y, stage.height * 0.06, stage.height * 0.82),
+    y: clamp(fittedCenter.y, stage.height * 0.06, stage.height * 0.58),
     width: clamp(fittedWidth, stage.width * 0.16, stage.width * 0.92),
     faceWidth,
     angle,

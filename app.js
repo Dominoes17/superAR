@@ -447,17 +447,17 @@ function updateFromLandmarks(landmarks) {
   const angle = ((Math.atan2(rightEye.y - leftEye.y, rightEye.x - leftEye.x) * 180) / Math.PI) * ROLL_GAIN;
   const yawFromNose = ((stableNoseTip.x - eyeCenter.x) / eyeDistance) * 36;
   const pitch = ((stableNoseTip.y - stableNoseBridge.y) / eyeDistance - 0.42) * 20;
-  const widthFromEyes = eyeDistance * 3.05;
+  const widthFromEyes = eyeDistance * 2.75;
   const widthFromFace = faceWidth * 0.68;
   const fittedWidth = mix(widthFromEyes, widthFromFace, faceWidth > eyeDistance ? 0.18 : 0);
   const fittedCenter = {
     x: mix(eyeCenter.x, stableNoseBridge.x, 0.12),
-    y: eyeCenter.y + eyeDistance * 0.38,
+    y: eyeCenter.y + eyeDistance * 0.18,
   };
   const nextFit = {
     x: clamp(fittedCenter.x, stage.width * 0.06, stage.width * 0.94),
     y: clamp(fittedCenter.y, stage.height * 0.04, stage.height * 0.68),
-    width: clamp(fittedWidth, stage.width * 0.12, stage.width * 0.68),
+    width: clamp(fittedWidth, stage.width * 0.12, stage.width * 0.62),
     faceWidth,
     angle,
     yaw: clamp(yawFromNose, -16, 16),

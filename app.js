@@ -187,29 +187,55 @@ function getVideoCoverRect() {
   return { x, y, width, height };
 }
 
-function mapLandmark(point) {
+function normalizeLandmark(point) {
+  if (!point || !Number.isFinite(point.x) || !Number.isFinite(point.y)) {
+    return null;
+  }
+
+  if (point.x > -0.35 && point.x < 1.35 && point.y > -0.35 && point.y < 1.35) {
+    return { x: point.x, y: point.y, space: "normalized" };
+  }
+
   const stage = video.getBoundingClientRect();
+  const videoWidth = video.videoWidth || stage.width;
+  const videoHeight = video.videoHeight || stage.height;
+
+  if (
+    videoWidth &&
+    videoHeight &&
+    point.x > -videoWidth * 0.35 &&
+    point.x < videoWidth * 1.35 &&
+    point.y > -videoHeight * 0.35 &&
+    point.y < videoHeight * 1.35
+  ) {
+    return { x: point.x / videoWidth, y: point.y / videoHeight, space: "pixel" };
+  }
+
+  return null;
+}
+
+function mapLandmark(point) {
+  const normalized = normalizeLandmark(point);
+
+  if (!normalized) {
+    return null;
+  }
+
+  const cover = getVideoCoverRect();
 
   return {
-    x: (1 - point.x) * stage.width,
-    y: point.y * stage.height,
+    x: cover.x + cover.width - normalized.x * cover.width,
+    y: cover.y + normalized.y * cover.height,
+    space: normalized.space,
   };
 }
 
 function isUsableLandmark(point) {
-  return (
-    point &&
-    Number.isFinite(point.x) &&
-    Number.isFinite(point.y) &&
-    point.x > -0.35 &&
-    point.x < 1.35 &&
-    point.y > -0.35 &&
-    point.y < 1.35
-  );
+  return Boolean(normalizeLandmark(point));
 }
 
 function averageMappedLandmarks(landmarks, indexes) {
-  const points = indexes.filter((index) => isUsableLandmark(landmarks[index])).map((index) => mapLandmark(landmarks[index]));
+  const points = indexes.map((index) => mapLandmark(landmarks[index])).filter(Boolean);
 
   if (!points.length) {
     return null;
@@ -218,6 +244,7 @@ function averageMappedLandmarks(landmarks, indexes) {
   return {
     x: points.reduce((sum, point) => sum + point.x, 0) / points.length,
     y: points.reduce((sum, point) => sum + point.y, 0) / points.length,
+    space: points.find((point) => point.space)?.space,
   };
 }
 
@@ -226,7 +253,7 @@ function mappedLandmark(landmarks, index) {
 }
 
 function validMappedLandmarks(landmarks) {
-  return landmarks.filter(isUsableLandmark).map(mapLandmark);
+  return landmarks.map(mapLandmark).filter(Boolean);
 }
 
 function boundingBox(points) {
@@ -248,6 +275,18 @@ function boundingBox(points) {
     maxY,
     width: maxX - minX,
     height: maxY - minY,
+  };
+}
+
+function centeredFallbackFit(stage) {
+  return {
+    x: stage.width * 0.5,
+    y: stage.height * 0.36,
+    width: stage.width * 0.58,
+    faceWidth: stage.width * 0.72,
+    angle: 0,
+    yaw: 0,
+    pitch: 0,
   };
 }
 
@@ -338,9 +377,18 @@ function updateFromLandmarks(landmarks) {
       return;
     }
 
+    const fallbackFit = centeredFallbackFit(stage);
+
     if (debugEnabled) {
-      debugText.textContent = `stage ${Math.round(stage.width)}x${Math.round(stage.height)}\nwaiting for valid face landmarks`;
+      debugText.textContent = [
+        `stage ${Math.round(stage.width)}x${Math.round(stage.height)}`,
+        "fallback centered",
+        `fit ${Math.round(fallbackFit.x)},${Math.round(fallbackFit.y)} w=${Math.round(fallbackFit.width)}`,
+      ].join("\n");
     }
+
+    smoothFit(fallbackFit);
+    applyFit();
     return;
   }
 
@@ -366,7 +414,7 @@ function updateFromLandmarks(landmarks) {
   const fittedWidth = mix(widthFromEyes, widthFromFace, faceWidth > eyeDistance ? 0.18 : 0);
   const fittedCenter = {
     x: mix(eyeCenter.x, stableNoseBridge.x, 0.12),
-    y: eyeCenter.y + eyeDistance * 0.34,
+    y: eyeCenter.y + eyeDistance * 0.56,
   };
   const nextFit = {
     x: clamp(fittedCenter.x, stage.width * 0.06, stage.width * 0.94),
@@ -384,6 +432,7 @@ function updateFromLandmarks(landmarks) {
       `eye ${Math.round(eyeCenter.x)},${Math.round(eyeCenter.y)} d=${Math.round(eyeDistance)}`,
       `fit ${Math.round(nextFit.x)},${Math.round(nextFit.y)} w=${Math.round(nextFit.width)}`,
       `angle ${nextFit.angle.toFixed(1)} yaw ${nextFit.yaw.toFixed(1)} pitch ${nextFit.pitch.toFixed(1)}`,
+      `space ${leftEye.space || "unknown"}`,
     ].join("\n");
   }
 

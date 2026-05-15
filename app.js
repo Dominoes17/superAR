@@ -29,10 +29,12 @@ const fitAdjustments = {
 const ENABLE_FACE_OCCLUDER = false;
 
 let faceMesh = null;
+let faceDetection = null;
 let trackingFrame = null;
 let renderFrame = null;
 let isDetecting = false;
 let lastSeenAt = 0;
+let lastMeshFitAt = 0;
 let glassesModel = null;
 let activeGlassesKey = "black";
 let availableGlassesKeys = [];
@@ -290,6 +292,41 @@ function centeredFallbackFit(stage) {
   };
 }
 
+function mapRelativePoint(point) {
+  if (!point || !Number.isFinite(point.x) || !Number.isFinite(point.y)) {
+    return null;
+  }
+
+  const cover = getVideoCoverRect();
+
+  return {
+    x: cover.x + cover.width - point.x * cover.width,
+    y: cover.y + point.y * cover.height,
+  };
+}
+
+function detectionLocation(detection) {
+  return detection?.locationData || detection?.location_data || null;
+}
+
+function detectionBox(location) {
+  return location?.relativeBoundingBox || location?.relative_bounding_box || null;
+}
+
+function detectionKeypoints(location) {
+  return Array.from(location?.relativeKeypoints || location?.relative_keypoints || []);
+}
+
+function boxValue(box, ...names) {
+  for (const name of names) {
+    if (Number.isFinite(box?.[name])) {
+      return box[name];
+    }
+  }
+
+  return null;
+}
+
 function distance(a, b) {
   return Math.hypot(a.x - b.x, a.y - b.y);
 }
@@ -376,23 +413,18 @@ function updateFromLandmarks(landmarks) {
 
       smoothFit(fallbackFit);
       applyFit();
-      return;
+      lastMeshFitAt = performance.now();
+      return true;
     }
-
-    const fallbackFit = centeredFallbackFit(stage);
 
     if (debugEnabled) {
       debugText.textContent = [
         `stage ${Math.round(stage.width)}x${Math.round(stage.height)}`,
         `valid ${validPoints.length}/${landmarks.length}`,
-        "fallback centered",
-        `fit ${Math.round(fallbackFit.x)},${Math.round(fallbackFit.y)} w=${Math.round(fallbackFit.width)}`,
+        "mesh invalid, waiting for detector",
       ].join("\n");
     }
-
-    smoothFit(fallbackFit);
-    applyFit();
-    return;
+    return false;
   }
 
   const leftEye = eyeOne.x <= eyeTwo.x ? eyeOne : eyeTwo;
@@ -443,15 +475,20 @@ function updateFromLandmarks(landmarks) {
   smoothFit(nextFit);
 
   applyFit();
+  lastMeshFitAt = performance.now();
+  return true;
 }
 
 function onFaceMeshResults(results) {
   const landmarks = results.multiFaceLandmarks?.[0];
 
   if (landmarks) {
-    lastSeenAt = performance.now();
-    updateFromLandmarks(landmarks);
-    setStatus("3D face tracking active. Move your head and the model should follow.");
+    if (updateFromLandmarks(landmarks)) {
+      lastSeenAt = performance.now();
+      setStatus("3D face tracking active. Move your head and the model should follow.");
+    } else if (!faceDetection) {
+      setStatus("Face mesh landmarks are not usable on this device.");
+    }
     return;
   }
 
@@ -461,14 +498,109 @@ function onFaceMeshResults(results) {
   }
 }
 
+function updateFromDetection(detection) {
+  const stage = video.getBoundingClientRect();
+  const location = detectionLocation(detection);
+  const box = detectionBox(location);
+
+  if (!box) {
+    return false;
+  }
+
+  const keypoints = detectionKeypoints(location).map(mapRelativePoint).filter(Boolean);
+  const eyeA = keypoints[0];
+  const eyeB = keypoints[1];
+  let fit = null;
+
+  if (eyeA && eyeB) {
+    const leftEye = eyeA.x <= eyeB.x ? eyeA : eyeB;
+    const rightEye = eyeA.x <= eyeB.x ? eyeB : eyeA;
+    const eyeDistance = distance(leftEye, rightEye);
+
+    if (Number.isFinite(eyeDistance) && eyeDistance > 8) {
+      const eyeCenter = {
+        x: (leftEye.x + rightEye.x) / 2,
+        y: (leftEye.y + rightEye.y) / 2,
+      };
+      const angle = (Math.atan2(rightEye.y - leftEye.y, rightEye.x - leftEye.x) * 180) / Math.PI;
+
+      fit = {
+        x: clamp(eyeCenter.x, stage.width * 0.06, stage.width * 0.94),
+        y: clamp(eyeCenter.y + eyeDistance * 0.42, stage.height * 0.04, stage.height * 0.72),
+        width: clamp(eyeDistance * 2.75, stage.width * 0.16, stage.width * 0.72),
+        faceWidth: eyeDistance * 2.85,
+        angle,
+        yaw: 0,
+        pitch: 0,
+      };
+    }
+  }
+
+  if (!fit) {
+    const cover = getVideoCoverRect();
+    const xmin = boxValue(box, "xmin", "xMin", "x");
+    const ymin = boxValue(box, "ymin", "yMin", "y");
+    const boxWidth = boxValue(box, "width", "w");
+    const boxHeight = boxValue(box, "height", "h");
+
+    if (xmin === null || ymin === null || boxWidth === null || boxHeight === null) {
+      return false;
+    }
+
+    const centerX = cover.x + cover.width - (boxValue(box, "xCenter") ?? xmin + boxWidth / 2) * cover.width;
+    const topY = cover.y + ymin * cover.height;
+    const width = boxWidth * cover.width;
+    const height = boxHeight * cover.height;
+
+    fit = {
+      x: clamp(centerX, stage.width * 0.06, stage.width * 0.94),
+      y: clamp(topY + height * 0.36, stage.height * 0.04, stage.height * 0.72),
+      width: clamp(width * 0.64, stage.width * 0.16, stage.width * 0.72),
+      faceWidth: width,
+      angle: 0,
+      yaw: 0,
+      pitch: 0,
+    };
+  }
+
+  if (debugEnabled) {
+    debugText.textContent = [
+      `stage ${Math.round(stage.width)}x${Math.round(stage.height)}`,
+      "source face-detection",
+      `keys ${keypoints.length}`,
+      `fit ${Math.round(fit.x)},${Math.round(fit.y)} w=${Math.round(fit.width)}`,
+      `angle ${fit.angle.toFixed(1)}`,
+    ].join("\n");
+  }
+
+  smoothFit(fit);
+  applyFit();
+  lastSeenAt = performance.now();
+  setStatus("Face detector tracking active. Move your head and the model should follow.");
+  return true;
+}
+
+function onFaceDetectionResults(results) {
+  const detection = results.detections?.[0];
+
+  if (detection) {
+    updateFromDetection(detection);
+  }
+}
+
 async function detectFrame() {
-  if (!faceMesh || video.readyState < 2 || isDetecting) {
+  if ((!faceMesh && !faceDetection) || video.readyState < 2 || isDetecting) {
     trackingFrame = requestAnimationFrame(detectFrame);
     return;
   }
 
   isDetecting = true;
-  await faceMesh.send({ image: video });
+  if (faceMesh) {
+    await faceMesh.send({ image: video });
+  }
+  if (faceDetection && performance.now() - lastMeshFitAt > 250) {
+    await faceDetection.send({ image: video });
+  }
   isDetecting = false;
   trackingFrame = requestAnimationFrame(detectFrame);
 }
@@ -490,6 +622,23 @@ function createFaceMesh() {
     minTrackingConfidence: 0.55,
   });
   faceMesh.onResults(onFaceMeshResults);
+  return true;
+}
+
+function createFaceDetection() {
+  if (!window.FaceDetection) {
+    return false;
+  }
+
+  faceDetection = new FaceDetection({
+    locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/face_detection/${file}`,
+  });
+
+  faceDetection.setOptions({
+    model: "short",
+    minDetectionConfidence: 0.55,
+  });
+  faceDetection.onResults(onFaceDetectionResults);
   return true;
 }
 
@@ -682,7 +831,10 @@ async function startCamera() {
     renderLoop();
     loader.classList.add("hidden");
 
-    if (createFaceMesh()) {
+    const hasFaceMesh = createFaceMesh();
+    createFaceDetection();
+
+    if (hasFaceMesh || faceDetection) {
       setStatus("Camera ready. Loading face tracker.");
       detectFrame();
     }

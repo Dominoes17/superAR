@@ -1,5 +1,5 @@
-import * as THREE from "three";
-import { GLTFLoader } from "https://cdn.jsdelivr.net/npm/three@0.164.1/examples/jsm/loaders/GLTFLoader.js";
+import * as THREE from "https://esm.sh/three@0.164.1";
+import { GLTFLoader } from "https://esm.sh/three@0.164.1/examples/jsm/loaders/GLTFLoader.js";
 
 const GLASSES_OPTIONS = {
   black: {
@@ -398,10 +398,7 @@ function tuneGlassesMaterials(model) {
 
 async function assetExists(path) {
   try {
-    const response = await fetch(path, {
-      method: "HEAD",
-      cache: "no-store",
-    });
+    const response = await fetch(path, { cache: "no-store" });
 
     return response.ok;
   } catch {
